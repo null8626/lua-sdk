@@ -13,7 +13,7 @@ topgg.test()
 ## Dependencies
 Install the following dependencies from the lit repository:
 ```
-creationix/coro-http@3.2.0
+creationix/coro-http
 luvit/json
 luvit/secure-socket
 ```
@@ -74,8 +74,6 @@ Params | Type | Required | Description
 --- | --- | --- | ---
 `stats` | `table` | ✅ | The stats object
 `stats.serverCount` / `stats.server_count` | `number` | ✅ | The client's server count
-`stats.shardId` / `stats.shard_id` | `number` | ❌ | The client's shard ID
-`stats.shardCount` / `stats.shard_count` | `number` | ❌ | The client's shard count
 ---
 
 `Api:getStats(id)`
@@ -95,13 +93,8 @@ Params | Type | Required | Description
 --- | --- | --- | ---
 `query` | `table` | ❌ | The query object
 `query.fields` | `any` | ❌ | The fields of the query
-`query.search` | `any` | ❌ | The search query
----
-
-`Api:getUser(id)`
-Params | Type | Required | Description
---- | --- | --- | ---
-`id` | `string` | ✅ | The ID of the user to get information of (top.gg user info)
+`query.offset` | `number` | ❌ | The amount of bots to skip, defaults to 0
+`query.limit` | `number` | ❌ | Maximum amount of bots to be returned, cannot exceed 500
 ---
 
 `Api:hasVoted(id)`
@@ -110,11 +103,14 @@ Params | Type | Required | Description
 `id` | `string` | ✅ | The ID of the user to check if they have voted for the bot the `Api` class was invoked with
 ---
 
-`Api:getVotes()`<br>No params.
+`Api:getVotes(page)`
+Params | Type | Required | Description
+--- | --- | --- | ---
+`page` | `number` | ✅ | The page number, must be at least 1
 
 ---
 
 `Api:isWeekend()`<br>No params.
 
 ## Contributors
-[Voltrex](https://github.com/VoltrexMaster)<br>[Matthew.](https://github.com/matthewthechickenman)<br>[MILLION](https://github.com/Million900o)<br>[null](https://github.com/vierofernando)
+[Voltrex](https://github.com/VoltrexMaster)<br>[Matthew.](https://github.com/matthewthechickenman)<br>[MILLION](https://github.com/Million900o)<br>[null](https://github.com/null8626)

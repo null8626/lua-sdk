@@ -1,28 +1,27 @@
-local timer = require('timer');
-local setInterval = timer.setInterval;
 local Api = require('api');
 local EventEmitter = require('EventEmitter');
+local timer = require('timer');
+
+EventEmitter:__init()
 
 local AutoPoster = require('class')('AutoPoster', EventEmitter);
 
 function AutoPoster:init(apiToken, client)
-  if not client or not client.guilds or not client.guilds.__len() then
+  if not client or not client.guilds or not client.user or not client.user.id then
     error("argument 'client' must be a discordia/discordia-like client instance");
   end
 
-  Api:init(apiToken)
+  Api:init(apiToken, client.user.id)
 
-  setInterval(function()
+  timer.setInterval(900000, function()
     local poster = coroutine.create(function()
-    local stats = {serverCount = client.guilds.__len()}
-    if client.totalShardCount then
-        stats.shardCount = client.totalShardCount
-    end
-    Api:postStats(stats);
-    self:emit('posted');
-  end);
+      local stats = {serverCount = #client.guilds}
+      Api:postStats(stats);
+      self:emit('posted');
+    end);
+
     coroutine.resume(poster);
-  end, 900000);
+  end);
 
   return self;
 end

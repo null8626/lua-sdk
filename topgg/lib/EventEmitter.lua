@@ -1,9 +1,6 @@
-local timer = require('timer');
-
 local wrap, yield = coroutine.wrap, coroutine.yield;
 local resume, running = coroutine.resume, coroutine.running;
 local insert, remove = table.insert, table.remove;
-local setTimeout, clearTimeout = timer.setTimeout, timer.clearTimeout;
 
 local EventEmitter = require('class')('EventEmitter');
 

@@ -26,10 +26,12 @@ end
 
 local Api = require('class')('Api');
 
-function Api:init(token)
-   if type(token) ~= 'string' then
+function Api:init(token, id)
+   if type(token) ~= 'string' or type(id) ~= 'string' then
       error("argument 'token' must be a string");
    end
+
+   self.id = id;
    self.token = token;
 end
 
@@ -48,15 +50,16 @@ function Api:request(method, path, body, query)
    end
 
    local url = base_url .. path;
+   local index = 0
    
    if query and next(query) then
      for k, v in pairs(query) do
-       insert(url, #url == 1 and '?' or '&');
-       insert(url, urlencode(k));
-       insert(url, '=');
-       insert(url, urlencode(v));
+       local prefix = index == 0 and '?' or '&';
+       index = index + 1;
+
+       url = url .. prefix;
+       url = url .. urlencode(k) .. '=' .. urlencode(v);
      end
-     url = concat(url);
    end
 
    local req = {
@@ -89,7 +92,7 @@ function Api:commit(method, url, req, body)
       res[i] = nil;
    end
 
-   local data = res['content-type'] == 'application/json' and json.decode(msg, 1, json.null) or msg;
+   local data = res['content-type']:find('application/json', 1, true) and json.decode(msg, 1, json.null) or msg;
 
    if res.code < 300 then
       return data, nil;
@@ -117,27 +120,21 @@ function Api:postStats(stats)
       error("'serverCount' must be a number");
    end
 
+   local server_count = stats.serverCount or stats.server_count;
+
+   if server == 0 then
+      error("'serverCount' must be non-zero");
+   end
+
    local __stats = {
-      server_count = stats.serverCount or stats.server_count,
+      server_count = server_count,
    };
 
-   if (stats.shardId or stats.shard_id) and (stats.shardCount or stats.shard_count) then
-     __stats.shard_id = stats.shard_id or stats.shardId
-     __stats.shard_count = stats.shard_count or stats.shardCount
-   end
-
-   local _, res = self:request('POST', '/bots/stats', __stats);
-   return res;
+   return self:request('POST', '/bots/stats', __stats);
 end
 
-function Api:getStats(id)
-   if type(id) ~= 'string' then
-      error("argument 'id' must be a string");
-   end
-
-   local stats = self:request('GET', f('/bots/%s/stats', id));
-
-   return stats;
+function Api:getStats()
+   return self:request('GET', '/bots/stats');
 end
 
 function Api:getBot(id)
@@ -150,36 +147,32 @@ end
 
 function Api:getBots(query)
    if query then
+      if type(query.sort) == 'string' and query.sort ~= 'monthlyPoints' and query.sort ~= 'id' and query.sort ~= 'date' then
+         error("argument 'sort' must be either 'monthlyPoints', 'id', or 'date'");
+      end
+
+      if type(query.limit) == 'number' and query.limit > 500 then
+         error("argument 'limit' must not exceed 500");
+      end
+
+      if type(query.offset) == 'number' and query.offset < 0 then
+         error("argument 'offset' must be positive");
+      end
+
       if type(query.fields) == 'table' then
          query.fields = concat(query.fields, ',');
       end
-
-      if type(query.search) == 'table' then
-         local search = {};
-         for k, v in pairs(query.search) do
-            insert(search, f('%s: %s', k, v));
-         end
-         query.search = search;
-      end
    end
 
-   return self:request('GET', '/bots', query);
+   return self:request('GET', '/bots', nil, query);
 end
 
-function Api:getUser(id)
-   if type(id) ~= 'string' then
-      error("argument 'id' must be a string");
+function Api:getVotes(page)
+   if type(page) ~= 'number' or page < 1 then
+      error("argument 'page' must be a valid number");
    end
 
-   return self:request('GET', f('/users/%s', id));
-end
-
-function Api:getVotes()
-   if not self.token then
-      error('Missing token');
-   end
-
-   return self:request('GET', '/bots/votes');
+   return self:request('GET', f('/bots/%s/votes?page=%d', self.id, page));
 end
 
 function Api:hasVoted(id)
