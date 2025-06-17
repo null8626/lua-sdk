@@ -4,7 +4,7 @@ local json = require('json');
 local f, gsub, byte = string.format, string.gsub, string.byte;
 local insert, concat = table.insert, table.concat;
 local running = coroutine.running;
-local base_url = 'https://top.gg/api';
+local base_url = 'https://top.gg/api/v1';
 local payloadRequired = {PUT = true, PATCH = true, POST = true};
 
 local function parseErrors(ret, errors, key)

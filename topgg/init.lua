@@ -2,5 +2,6 @@ package.path = './deps/?/init.lua;./deps/?.lua;./topgg/lib/?.lua;./deps/secure-s
 return {
     Api = require('api'),
     AutoPoster = require('autoposter'),
+    Widget = require('widget'),
     test = require('test')
 }
