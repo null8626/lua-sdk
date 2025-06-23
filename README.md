@@ -1,116 +1,123 @@
-# topgg-lua
-## Installation
-To install this library, place the topgg folder beside your root folder and require it by using this segment of code:
-```lua
-package.path = './?/init.lua' .. package.path
-local topgg = require('topgg')
-```
-to ensure that it ran successfully, you can run
-```lua
-topgg.test()
-```
+# Top.gg Lua SDK
 
-## Dependencies
-Install the following dependencies from the lit repository:
+The community-maintained Lua library for Top.gg.
+
+## Installation
+
+To install this library, place [the `topgg` directory](https://github.com/top-gg-community/lua-sdk/tree/main/topgg) beside your root directory, then install the following dependencies from the lit repository:
+
 ```
 creationix/coro-http
 luvit/json
 luvit/secure-socket
+luvit/timer
 ```
 
-## Using the library
-Start using the API component of the library by using 
+## Setting up
+
 ```lua
-topgg.Api:init(token, id)
+local topgg = require("topgg");
+
+local botId = "BOT_ID";
+
+topgg.Api:init(os.getenv("TOPGG_TOKEN"), botId);
 ```
 
-## Example usage
-Here we use our `isWeekend()` and `getStats()` method as an example.
-```lua
-local topgg = require('topgg');
-local Api = topgg.Api:init('YOUR-TOP.GG-TOKEN-GOES-HERE', 'YOUR-CLIENT-ID-GOES-HERE');
+## Usage
 
-local checkWeekend = coroutine.create(function()
-  print(topgg.Api:isWeekend());
+### Getting a bot
+
+```lua
+local bot = topgg.Api:getBot("264811613708746752");
+```
+
+### Getting several bots
+
+```lua
+local bots = topgg.Api:getBots({
+  sort = "date",
+  limit = 50,
+  offset = 0
+});
+```
+
+### Getting your bot's voters
+
+```lua
+--                                Page number
+local voters = topgg.Api:getVotes(1);
+```
+
+### Check if a user has voted for your bot
+
+```lua
+local hasVoted = topgg.Api:hasVoted("661200758510977084");
+```
+
+### Getting your bot's server count
+
+```lua
+local stats = topgg.Api:getStats();
+local serverCount = stats.server_count;
+```
+
+### Posting your bot's server count
+
+```lua
+topgg.Api:postStats({
+  serverCount = bot:getServerCount()
+});
+```
+
+### Automatically posting your bot's server count every few minutes
+
+With Discordia:
+
+```lua
+local discordia = require("discordia");
+local client = discordia.Client();
+
+client:on('ready', function()
+  print(client.user.username .. " is now ready!");
+
+  autoposter = topgg.AutoPoster:init(os.getenv("TOPGG_TOKEN"), client);
+
+  autoposter:on("posted", function()
+    print("Posted stats to Top.gg!");
+  end);
 end);
 
-coroutine.resume(checkWeekend); -- This will print `false` if it's not the weekends but it'll be `true` when it's the weekends.
-
-local getBotStats = coroutine.create(function(id)
-  print(topgg.Api:getStats(id));
-end);
-
-coroutine.resume(getBotStats, '716061781172158464'); -- This will print a value that can be encoded into a table by using json.decode()
+client:run("Bot " .. os.getenv("BOT_TOKEN"));
 ```
 
-## Documentation (Api)
-`Api:init(token, id)`
-Params | Type | Required | Description
---- | --- | --- | ---
-`token` | `string` | ✅ | Your top.gg token
-`id` | `string` | ✅ | Your client ID
----
+### Checking if the weekend vote multiplier is active
 
-`Api:request(method, path, body, query)`
-Params | Type | Required | Description
---- | --- | --- | ---
-`method` | `string` | ✅ | The HTTP request method (e.g. `GET`)
-`path` | `string` | ✅ | The top.gg endpoint
-`body` | `table` | ❌ | The payload to send while making a `POST`, `PATCH` or `PUT` request
-`query` | `table` | ❌ | The query for the passed endpoint
----
+```lua
+local isWeekend = topgg.Api:isWeekend();
+```
 
-`Api:commit(method, url, req, body)`
-Params | Type | Required | Description
---- | --- | --- | ---
-`method` | `string` | ✅ | The HTTP request method (e.g. `GET`)
-`url` | `string` | ✅ | The URL to make a request to
-`req` | `table` | ❌ | The headers of the request
-`body` | `table` | ❌ | The payload to send while making a `POST`, `PATCH` or `PUT` request
----
+### Generating widget URLs
 
-`Api:postStats(stats)`
-Params | Type | Required | Description
---- | --- | --- | ---
-`stats` | `table` | ✅ | The stats object
-`stats.serverCount` / `stats.server_count` | `number` | ✅ | The client's server count
----
+#### Large
 
-`Api:getStats(id)`
-Params | Type | Required | Description
---- | --- | --- | ---
-`id` | `string` | ✅ | The ID of the bot to get stats of
----
+```lua
+local widgetUrl = topgg.Widget.large("discord_bot", "574652751745777665");
+```
 
-`Api:getBot(id)`
-Params | Type | Required | Description
---- | --- | --- | ---
-`id` | `string` | ✅ | The ID of the bot to get information of
----
+#### Votes
 
-`Api:getBots(query)`
-Params | Type | Required | Description
---- | --- | --- | ---
-`query` | `table` | ❌ | The query object
-`query.fields` | `any` | ❌ | The fields of the query
-`query.offset` | `number` | ❌ | The amount of bots to skip, defaults to 0
-`query.limit` | `number` | ❌ | Maximum amount of bots to be returned, cannot exceed 500
----
+```lua
+local widgetUrl = topgg.Widget.votes("discord_bot", "574652751745777665");
+```
 
-`Api:hasVoted(id)`
-Params | Type | Required | Description
---- | --- | --- | ---
-`id` | `string` | ✅ | The ID of the user to check if they have voted for the bot the `Api` class was invoked with
----
+#### Owner
 
-`Api:getVotes(page)`
-Params | Type | Required | Description
---- | --- | --- | ---
-`page` | `number` | ✅ | The page number, must be at least 1
+```lua
+local widgetUrl = topgg.Widget.owner("discord_bot", "574652751745777665");
+```
 
----
+#### Social
 
-`Api:isWeekend()`<br>No params.
-
-## Contributors
-[Voltrex](https://github.com/VoltrexMaster)<br>[Matthew.](https://github.com/matthewthechickenman)<br>[MILLION](https://github.com/Million900o)<br>[null](https://github.com/null8626)
+```lua
+local widgetUrl = topgg.Widget.social("discord_bot", "574652751745777665");
+```
