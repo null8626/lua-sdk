@@ -1,192 +1,235 @@
-local http = require('coro-http');
-local request = http.request;
-local json = require('json');
-local f, gsub, byte = string.format, string.gsub, string.byte;
-local insert, concat = table.insert, table.concat;
-local running = coroutine.running;
-local base_url = 'https://top.gg/api/v1';
-local payloadRequired = {PUT = true, PATCH = true, POST = true};
+local http = require('coro-http')
+local timer = require('timer')
+local json = require('json')
 
-local function parseErrors(ret, errors, key)
-   for k, v in pairs(errors) do
-      if k == '_errors' then
-         for _, err in ipairs(v) do
-            insert(ret, f('%s in %s : %s', err.code, key or 'payload', err.message));
-         end
-      else
-         if key then
-            parseErrors(ret, v, f(k:find('^[%a_][%a%d_]*$') and '%s.%s' or tonumber(k) and '%s[%d]' or '%s[%q]', k, v));
-         else
-            parseErrors(ret, v, k);
-         end
+local base_url = 'https://top.gg/api/v1'
+
+local function parse_errors(ret, errors, key)
+  for k, v in pairs(errors) do
+    if k == '_errors' then
+      for _, err in ipairs(v) do
+        table.insert(
+          ret,
+          string.format(
+            '%s in %s : %s',
+            err.code,
+            key or 'payload',
+            err.message
+          )
+        )
       end
-   end
-   return concat(ret, '\n\t');
+    else
+      if key then
+        parse_errors(
+          ret,
+          v,
+          string.format(
+            k:find('^[%a_][%a%d_]*$') and '%s.%s' or tonumber(
+              k
+            ) and '%s[%d]' or '%s[%q]',
+            k,
+            v
+          )
+        )
+      else
+        parse_errors(ret, v, k)
+      end
+    end
+  end
+
+  return table.concat(ret, '\n\t')
 end
 
-local Api = require('class')('Api');
+local Api = {}
 
-function Api:init(token, id)
-   if type(token) ~= 'string' or type(id) ~= 'string' then
-      error("argument 'token' must be a string");
-   end
+Api.__index = Api
 
-   self.id = id;
-   self.token = token;
-end
+function Api:new(token, id)
+  if type(token) ~= 'string' or type(id) ~= 'string' then
+    error("argument 'token' must be a string")
+  end
 
-local function tohex(char)
-   return f('%%%02X', byte(char));
+  local object = setmetatable({}, self)
+
+  object.token = token
+  object.id = id
+
+  return object
 end
 
 local function urlencode(obj)
-   return (gsub(tostring(obj), '%W', tohex));
+  return (string.gsub(tostring(obj), '%W', function(char)
+    return string.format('%%%02X', string.byte(char))
+  end))
 end
 
-function Api:request(method, path, body, query)
-   local _, main = running();
-   if main then
-      error('Cannot make HTTP request outside a coroutine', 2);
-   end
+function Api:__request(method, path, body, query)
+  local _, main = coroutine.running()
 
-   local url = base_url .. path;
-   local index = 0
-   
-   if query and next(query) then
-     for k, v in pairs(query) do
-       local prefix = index == 0 and '?' or '&';
-       index = index + 1;
+  if main then
+    error('Cannot make HTTP request outside of a coroutine', 2)
+  end
 
-       url = url .. prefix;
-       url = url .. urlencode(k) .. '=' .. urlencode(v);
-     end
-   end
+  local url = base_url .. path
+  local index = 0
 
-   local req = {
-      {'Authorization', self.token}
-   };
+  if query and next(query) then
+    for k, v in pairs(query) do
+      local prefix = index == 0 and '?' or '&'
 
-   if payloadRequired[method] then
-      body = body and json.encode(body) or '{}';
-      insert(req, {'Content-Type', 'application/json'});
-      insert(req, {'Content-Length', #body});
-   end
+      index = index + 1
+      url = url .. prefix .. urlencode(k) .. '=' .. urlencode(v)
+    end
+  end
 
-   local data, err = self:commit(method, url, req, body);
-   if data then
-      return data;
-   else
-      return nil, err;
-   end
+  local request = { { 'Authorization', self.token } }
+
+  if method ~= 'GET' then
+    body = body and json.encode(body) or '{}'
+
+    table.insert(request, { 'Content-Type', 'application/json' })
+    table.insert(request, { 'Content-Length', #body })
+  end
+
+  local data, err = self:__commit(method, url, request, body)
+
+  if data then
+    return data
+  else
+    return nil, err
+  end
 end
 
-function Api:commit(method, url, req, body)
-   local success, res, msg = pcall(request, method, url, req, body);
+function Api:__commit(method, url, request, body)
+  local success, res, msg = pcall(http.request, method, url, request, body)
 
-   if not success then
-      return nil, res;
-   end
+  if not success then
+    return nil, res
+  end
 
-   for i, v in ipairs(res) do
-      res[v[1]:lower()] = v[2];
-      res[i] = nil;
-   end
+  for i, v in ipairs(res) do
+    res[v[1]:lower()] = v[2]
+    res[i] = nil
+  end
 
-   local data = res['content-type']:find('application/json', 1, true) and json.decode(msg, 1, json.null) or msg;
+  local data =
+    res['content-type']:find('application/json', 1, true) and json.decode(
+      msg,
+      1,
+      json.null
+    ) or msg
 
-   if res.code < 300 then
-      return data, nil;
-   else if type(data) == 'table' then
-      if data.code and data.message then
-         msg = f('HTTP Error %i : %s', data.code, data.message);
-      else
-         msg = 'HTTP Error';
-      end
+  if res.code < 300 then
+    return data, nil
+  elseif type(data) == 'table' then
+    if data.code and data.message then
+      msg = string.format('HTTP Error %i : %s', data.code, data.message)
+    else
+      msg = 'HTTP Error'
+    end
 
-      if data.errors then
-         msg = parseErrors({msg}, data.errors);
-      end
-   end
-end
-   return nil, msg;
-end
+    if data.errors then
+      msg = parse_errors({ msg }, data.errors)
+    end
+  end
 
-function Api:postStats(stats)
-   if not stats or (not stats.serverCount and not stats.server_count) then
-      error('Server count missing');
-   end
-
-   if type(stats.serverCount) ~= 'number' and type(stats.server_count) ~= 'number' then
-      error("'serverCount' must be a number");
-   end
-
-   local server_count = stats.serverCount or stats.server_count;
-
-   if server == 0 then
-      error("'serverCount' must be non-zero");
-   end
-
-   local __stats = {
-      server_count = server_count,
-   };
-
-   return self:request('POST', '/bots/stats', __stats);
+  return nil, msg
 end
 
-function Api:getStats()
-   return self:request('GET', '/bots/stats');
+function Api:post_server_count(server_count)
+  if type(server_count) ~= 'number' or server_count <= 0 then
+    error("'server_count' must be a number and non-zero")
+  end
+
+  return self:__request('POST', '/bots/stats', { server_count = server_count })
 end
 
-function Api:getBot(id)
-   if type(id) ~= 'string' then
-      error("argument 'id' must be a string");
-   end
+function Api:get_server_count()
+  local stats = self:__request('GET', '/bots/stats')
 
-   return self:request('GET', f('/bots/%s', id));
+  return stats and stats.server_count
 end
 
-function Api:getBots(query)
-   if query then
-      if type(query.sort) == 'string' and query.sort ~= 'monthlyPoints' and query.sort ~= 'id' and query.sort ~= 'date' then
-         error("argument 'sort' must be either 'monthlyPoints', 'id', or 'date'");
-      end
+function Api:get_bot(id)
+  if type(id) ~= 'string' then
+    error("argument 'id' must be a string")
+  end
 
-      if type(query.limit) == 'number' and query.limit > 500 then
-         error("argument 'limit' must not exceed 500");
-      end
-
-      if type(query.offset) == 'number' and query.offset < 0 then
-         error("argument 'offset' must be positive");
-      end
-
-      if type(query.fields) == 'table' then
-         query.fields = concat(query.fields, ',');
-      end
-   end
-
-   return self:request('GET', '/bots', nil, query);
+  return self:__request('GET', string.format('/bots/%s', id))
 end
 
-function Api:getVotes(page)
-   if type(page) ~= 'number' or page < 1 then
-      error("argument 'page' must be a valid number");
-   end
+function Api:get_bots(query)
+  if query then
+    if type(
+      query.sort
+    ) == 'string' and query.sort ~= 'monthlyPoints' and query.sort ~= 'id' and query.sort ~= 'date' then
+      error("argument 'sort' must be either 'monthlyPoints', 'id', or 'date'")
+    elseif type(query.limit) == 'number' and query.limit > 500 then
+      error("argument 'limit' must not exceed 500")
+    elseif type(query.offset) == 'number' and query.offset < 0 then
+      error("argument 'offset' must be positive")
+    end
 
-   return self:request('GET', f('/bots/%s/votes?page=%d', self.id, page));
+    if type(query.fields) == 'table' then
+      query.fields = table.concat(query.fields, ',')
+    end
+  end
+
+  return self:__request('GET', '/bots', nil, query)
 end
 
-function Api:hasVoted(id)
-   if type(id) ~= 'string' then
-      error("argument 'id' must be a string");
-   end
-   local data = self:request('GET', f('/bots/check?userId=%s', id));
+function Api:get_voters(page)
+  if type(page) ~= 'number' or page < 1 then
+    error("argument 'page' must be a valid number")
+  end
 
-   return not not data.voted;
+  return self:__request(
+    'GET',
+    string.format('/bots/%s/votes?page=%d', self.id, page)
+  )
 end
 
-function Api:isWeekend()
-   local data = self:request('GET', '/weekend');
-   return not not data.is_weekend;
+function Api:has_voted(id)
+  if type(id) ~= 'string' then
+    error("argument 'id' must be a string")
+  end
+
+  local data = self:__request('GET', string.format('/bots/check?userId=%s', id))
+
+  return not not data.voted
 end
 
-return Api;
+function Api:is_weekend()
+  local data = self:__request('GET', '/weekend')
+
+  return not not data.is_weekend
+end
+
+function Api:new_autoposter(client, posted, delay)
+  if not client or not client.guilds or not client.user or not client.user.id then
+    error(
+      "argument 'client' must be a discordia/discordia-like client instance"
+    )
+  elseif type(delay) ~= 'number' or delay < 900000 then
+    delay = 900000
+  end
+
+  local id = timer.setInterval(delay, function()
+    coroutine.resume(
+      coroutine.create(function()
+        local server_count = 5 -- #client.guilds
+        self:post_server_count(server_count)
+
+        if type(posted) == 'function' then
+          posted(server_count)
+        end
+      end)
+    )
+  end)
+
+  return { stop = function()
+    timer.clearInterval(id)
+  end }
+end
+
+return Api

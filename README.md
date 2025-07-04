@@ -11,16 +11,15 @@ creationix/coro-http
 luvit/json
 luvit/secure-socket
 luvit/timer
+luvit/tls
 ```
 
 ## Setting up
 
 ```lua
-local topgg = require("topgg");
+local topgg = require('topgg')
 
-local botId = "BOT_ID";
-
-topgg.Api:init(os.getenv("TOPGG_TOKEN"), botId);
+local client = topgg.Api:new(os.getenv('TOPGG_TOKEN'), 'BOT_ID')
 ```
 
 ## Usage
@@ -28,45 +27,42 @@ topgg.Api:init(os.getenv("TOPGG_TOKEN"), botId);
 ### Getting a bot
 
 ```lua
-local bot = topgg.Api:getBot("264811613708746752");
+local bot = client:get_bot('264811613708746752')
 ```
 
 ### Getting several bots
 
 ```lua
-local bots = topgg.Api:getBots({
-  sort = "date",
+local bots = client:get_bots({
+  sort = 'date',
   limit = 50,
   offset = 0
-});
+})
 ```
 
 ### Getting your bot's voters
 
 ```lua
---                                Page number
-local voters = topgg.Api:getVotes(1);
+--                               Page number
+local voters = client:get_voters(1)
 ```
 
 ### Check if a user has voted for your bot
 
 ```lua
-local hasVoted = topgg.Api:hasVoted("661200758510977084");
+local hasVoted = client:has_voted('661200758510977084')
 ```
 
 ### Getting your bot's server count
 
 ```lua
-local stats = topgg.Api:getStats();
-local serverCount = stats.server_count;
+local server_count = client:get_server_count()
 ```
 
 ### Posting your bot's server count
 
 ```lua
-topgg.Api:postStats({
-  serverCount = bot:getServerCount()
-});
+client:post_server_count(bot:get_server_count())
 ```
 
 ### Automatically posting your bot's server count every few minutes
@@ -74,26 +70,33 @@ topgg.Api:postStats({
 With Discordia:
 
 ```lua
-local discordia = require("discordia");
-local client = discordia.Client();
+local discordia = require('discordia')
 
-client:on('ready', function()
-  print(client.user.username .. " is now ready!");
+local bot = discordia.Client()
 
-  autoposter = topgg.AutoPoster:init(os.getenv("TOPGG_TOKEN"), client);
+bot:on('ready', function()
+  print(bot.user.username .. ' is now ready!')
 
-  autoposter:on("posted", function()
-    print("Posted stats to Top.gg!");
-  end);
-end);
+  autoposter = client:new_autoposter(bot, function(server_count)
+    print('Successfully posted ' .. server_count .. ' servers to Top.gg!s')
+  end)
+end)
 
-client:run("Bot " .. os.getenv("BOT_TOKEN"));
+bot:on('ready', function()
+  print('Logged in as ' .. bot.user.username)
+end)
+
+bot:run('Bot ' .. os.getenv('BOT_TOKEN'))
+
+-- ...
+
+autoposter:stop() -- Optional
 ```
 
 ### Checking if the weekend vote multiplier is active
 
 ```lua
-local isWeekend = topgg.Api:isWeekend();
+local is_weekend = client:is_weekend()
 ```
 
 ### Generating widget URLs
@@ -101,23 +104,61 @@ local isWeekend = topgg.Api:isWeekend();
 #### Large
 
 ```lua
-local widgetUrl = topgg.Widget.large("discord_bot", "574652751745777665");
+local widget_url = topgg.Widget.large('discord_bot', '574652751745777665')
 ```
 
 #### Votes
 
 ```lua
-local widgetUrl = topgg.Widget.votes("discord_bot", "574652751745777665");
+local widget_url = topgg.Widget.votes('discord_bot', '574652751745777665')
 ```
 
 #### Owner
 
 ```lua
-local widgetUrl = topgg.Widget.owner("discord_bot", "574652751745777665");
+local widget_url = topgg.Widget.owner('discord_bot', '574652751745777665')
 ```
 
 #### Social
 
 ```lua
-local widgetUrl = topgg.Widget.social("discord_bot", "574652751745777665");
+local widget_url = topgg.Widget.social('discord_bot', '574652751745777665')
+```
+
+### Webhooks
+
+#### Being notified whenever someone voted for your bot
+
+##### HTTP
+
+```lua
+local webhooks = topgg.Webhooks:new(os.getenv('MY_TOPGG_WEBHOOK_SECRET'))
+
+webhooks:add('/votes', function(vote)
+  print('A user with the ID of ' .. vote.user .. ' has voted us on Top.gg!')
+end)
+
+webhooks:start({
+  host = '127.0.0.1',
+  port = 8080
+})
+```
+
+##### HTTPS
+
+```lua
+local fs = require('fs')
+
+local webhooks = topgg.Webhooks:new(os.getenv('MY_TOPGG_WEBHOOK_SECRET'))
+
+webhooks:add('/votes', function(vote)
+  print('A user with the ID of ' .. vote.user .. ' has voted us on Top.gg!')
+end)
+
+webhooks:start({
+  key = fs.readFileSync('server.key'),
+  cert = fs.readFileSync('server.crt'),
+  host = '127.0.0.1',
+  port = 8080
+})
 ```
