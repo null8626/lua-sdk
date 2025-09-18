@@ -91,13 +91,7 @@ function Api:__request(method, path, body, query)
     table.insert(request, { 'Content-Length', #body })
   end
 
-  local data, err = self:__commit(method, url, request, body)
-
-  if data then
-    return data
-  else
-    return nil, err
-  end
+  return self:__commit(method, url, request, body)
 end
 
 function Api:__commit(method, url, request, body)
@@ -145,9 +139,13 @@ function Api:post_bot_server_count(server_count)
 end
 
 function Api:get_bot_server_count()
-  local stats = self:__request('GET', '/bots/stats')
+  local stats, err = self:__request('GET', '/bots/stats')
 
-  return stats and stats.server_count
+  if stats then
+    return stats.server_count, nil
+  end
+
+  return nil, err
 end
 
 function Api:get_bot(id)
@@ -194,15 +192,23 @@ function Api:has_voted(id)
     error("argument 'id' must be a string")
   end
 
-  local data = self:__request('GET', string.format('/bots/check?userId=%s', id))
+  local data, err = self:__request('GET', string.format('/bots/check?userId=%s', id))
 
-  return data.voted ~= 0
+  if data then
+    return data.voted ~= 0, nil
+  end
+
+  return nil, err
 end
 
 function Api:is_weekend()
-  local data = self:__request('GET', '/weekend')
+  local data, err = self:__request('GET', '/weekend')
 
-  return not not data.is_weekend
+  if data then
+    return data.is_weekend, nil
+  end
+
+  return nil, err
 end
 
 function Api:new_bot_autoposter(client, posted, delay)
