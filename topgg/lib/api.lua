@@ -196,7 +196,7 @@ function Api:has_voted(id)
 
   local data = self:__request('GET', string.format('/bots/check?userId=%s', id))
 
-  return not not data.voted
+  return data.voted ~= 0
 end
 
 function Api:is_weekend()
