@@ -1,10 +1,11 @@
 local http = require('coro-http')
 local timer = require('timer')
 local json = require('json')
+local base64 = require('base64')
 
-local base_url = 'https://top.gg/api'
+local baseUrl = 'https://top.gg/api'
 
-local function parse_errors(ret, errors, key)
+local function parseErrors(ret, errors, key)
   for k, v in pairs(errors) do
     if k == '_errors' then
       for _, err in ipairs(v) do
@@ -20,7 +21,7 @@ local function parse_errors(ret, errors, key)
       end
     else
       if key then
-        parse_errors(
+        parseErrors(
           ret,
           v,
           string.format(
@@ -32,7 +33,7 @@ local function parse_errors(ret, errors, key)
           )
         )
       else
-        parse_errors(ret, v, k)
+        parseErrors(ret, v, k)
       end
     end
   end
@@ -40,13 +41,58 @@ local function parse_errors(ret, errors, key)
   return table.concat(ret, '\n\t')
 end
 
+local function addBase64Padding(data)
+  data = data:gsub('-', '+'):gsub('_', '/')
+
+  local rem = #data % 4
+
+  if rem ~= 0 then
+    data = data .. string.rep('=', 4 - rem)
+  end
+  
+  return data
+end
+
+local function parseToken(token)
+  local tokenSegments = {}
+  
+  for seg in string.gmatch(token, '([^.]+)') do
+    table.insert(tokenSegments, seg)
+  end
+
+  if #tokenSegments ~= 3 then
+    return nil
+  end
+
+  local tokenData = base64.decode(addBase64Padding(tokenSegments[2]))
+  local obj = json.decode(tokenData)
+
+  if obj and obj.id then
+    return obj.id
+  end
+
+  return nil
+end
+
+local function urlencode(obj)
+  return (string.gsub(tostring(obj), '%W', function(char)
+    return string.format('%%%02X', string.byte(char))
+  end))
+end
+
 local Api = {}
 
 Api.__index = Api
 
-function Api:new(token, id)
-  if type(token) ~= 'string' or type(id) ~= 'string' then
-    error("argument 'token' must be a string")
+function Api:new(token)
+  if type(token) ~= 'string' then
+    error('argument \'token\' must be a string')
+  end
+
+  local id = parseToken(token)
+
+  if not id then
+    error('argument \'token\' is not a valid Top.gg API token')
   end
 
   local object = setmetatable({}, self)
@@ -57,12 +103,6 @@ function Api:new(token, id)
   return object
 end
 
-local function urlencode(obj)
-  return (string.gsub(tostring(obj), '%W', function(char)
-    return string.format('%%%02X', string.byte(char))
-  end))
-end
-
 function Api:__request(method, path, body, query)
   local _, main = coroutine.running()
 
@@ -70,7 +110,7 @@ function Api:__request(method, path, body, query)
     error('Cannot make HTTP request outside of a coroutine', 2)
   end
 
-  local url = base_url .. path
+  local url = baseUrl .. path
   local index = 0
 
   if query and next(query) then
@@ -123,49 +163,52 @@ function Api:__commit(method, url, request, body)
     end
 
     if data.errors then
-      msg = parse_errors({ msg }, data.errors)
+      msg = parseErrors({ msg }, data.errors)
     end
   end
 
   return nil, msg
 end
 
-function Api:post_bot_server_count(server_count)
-  if type(server_count) ~= 'number' or server_count <= 0 then
-    error("'server_count' must be a number and non-zero")
+function Api:postStats(stats)
+  if not stats or not (stats.serverCount or stats.server_count) then
+    error('Server count missing')
   end
 
-  return self:__request('POST', '/bots/stats', { server_count = server_count })
-end
+  local newStats = {
+    server_count = stats.serverCount or stats.server_count,
+  }
 
-function Api:get_bot_server_count()
-  local stats, err = self:__request('GET', '/bots/stats')
-
-  if stats then
-    return stats.server_count, nil
+  if type(newStats.server_count) ~= 'number' or newStats.server_count <= 0 then
+    error('\'server_count\' must be a number and non-zero')
   end
 
-  return nil, err
+  local _, res = self:__request('POST', '/bots/stats', newStats)
+  return res
 end
 
-function Api:get_bot(id)
+function Api:getStats(_id)
+  return self:__request('GET', '/bots/stats')
+end
+
+function Api:getBot(id)
   if type(id) ~= 'string' then
-    error("argument 'id' must be a string")
+    error('argument \'id\' must be a string')
   end
 
   return self:__request('GET', string.format('/bots/%s', id))
 end
 
-function Api:get_bots(query)
+function Api:getBots(query)
   if query then
     if type(
       query.sort
     ) == 'string' and query.sort ~= 'monthlyPoints' and query.sort ~= 'id' and query.sort ~= 'date' then
-      error("argument 'sort' must be either 'monthlyPoints', 'id', or 'date'")
+      error('argument \'sort\' must be either \'monthlyPoints\', \'id\', or \'date\'')
     elseif type(query.limit) == 'number' and query.limit > 500 then
-      error("argument 'limit' must not exceed 500")
+      error('argument \'limit\' must not exceed 500')
     elseif type(query.offset) == 'number' and query.offset < 0 then
-      error("argument 'offset' must be positive")
+      error('argument \'offset\' must be positive')
     end
 
     if type(query.fields) == 'table' then
@@ -176,9 +219,13 @@ function Api:get_bots(query)
   return self:__request('GET', '/bots', nil, query)
 end
 
-function Api:get_voters(page)
+function Api:getUser(id)
+  error('getUser() is deprecated since API v0')
+end
+
+function Api:getVotes(page)
   if type(page) ~= 'number' or page < 1 then
-    error("argument 'page' must be a valid number")
+    error('argument \'page\' must be a valid number')
   end
 
   return self:__request(
@@ -187,9 +234,9 @@ function Api:get_voters(page)
   )
 end
 
-function Api:has_voted(id)
+function Api:hasVoted(id)
   if type(id) ~= 'string' then
-    error("argument 'id' must be a string")
+    error('argument \'id\' must be a string')
   end
 
   local data, err = self:__request('GET', string.format('/bots/check?userId=%s', id))
@@ -201,7 +248,7 @@ function Api:has_voted(id)
   return nil, err
 end
 
-function Api:is_weekend()
+function Api:isWeekend()
   local data, err = self:__request('GET', '/weekend')
 
   if data then
@@ -211,10 +258,10 @@ function Api:is_weekend()
   return nil, err
 end
 
-function Api:new_bot_autoposter(client, posted, delay)
+function Api:newAutoposter(client, posted, delay)
   if not client or not client.guilds or not client.user or not client.user.id then
     error(
-      "argument 'client' must be a discordia/discordia-like client instance"
+      'argument \'client\' must be a discordia/discordia-like client instance'
     )
   elseif type(delay) ~= 'number' or delay < 900000 then
     delay = 900000
@@ -223,11 +270,14 @@ function Api:new_bot_autoposter(client, posted, delay)
   local id = timer.setInterval(delay, function()
     coroutine.resume(
       coroutine.create(function()
-        local server_count = #client.guilds
-        self:post_bot_server_count(server_count)
+        local serverCount = #client.guilds
 
-        if type(posted) == 'function' then
-          posted(server_count)
+        if serverCount ~= 0 then
+          self:postStats({ server_count = serverCount })
+
+          if type(posted) == 'function' then
+            posted(serverCount)
+          end
         end
       end)
     )
