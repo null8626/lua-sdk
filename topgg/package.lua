@@ -15,6 +15,7 @@ return {
     'luvit/secure-socket',
     'luvit/timer',
     'luvit/tls',
+    'luvit/http-codec',
   },
   files = { '**.lua', '!test*' },
 }
