@@ -1,2 +1,4 @@
 **/deps/
 .vscode/
+discordia.log
+gateway.json
