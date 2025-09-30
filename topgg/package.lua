@@ -1,6 +1,6 @@
 return {
   name = 'topgg-lua',
-  version = '1.0.0',
+  version = '0.1.0',
   description = 'A library for top.gg, in lua',
   tags = { 'dbl', 'topgg', 'top.gg' },
   license = 'MIT',
